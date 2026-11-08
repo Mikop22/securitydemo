@@ -18,17 +18,28 @@ class ConfigLoadError(ValueError):
 
 
 def resolve_config_path(config_root: Path, profile: str) -> Path:
-    """Return the config file for a profile.
+    """Return the config file for a profile, contained under config_root.
 
-    VULNERABLE implementation: concatenates the caller-supplied profile into a
-    path under config_root with no containment check. Traversal segments such as
-    ``..`` escape the intended directory.
+    Rejects absolute paths, parent segments (``..``), null bytes, and any
+    resolved path that is not inside the config root.
     """
 
     if not profile:
         raise ConfigLoadError("profile must be non-empty")
-    # Intentionally unsafe join used by the broken portal build.
-    return Path(str(config_root) + "/" + profile + ".yml")
+    if "\x00" in profile:
+        raise ConfigLoadError("profile must not contain null bytes")
+
+    candidate = Path(profile)
+    if candidate.is_absolute():
+        raise ConfigLoadError("profile must be a relative path")
+    if ".." in candidate.parts:
+        raise ConfigLoadError("profile must not contain parent path segments")
+
+    root = config_root.resolve()
+    path = (root / f"{profile}.yml").resolve()
+    if not path.is_relative_to(root):
+        raise ConfigLoadError("profile path escapes config root")
+    return path
 
 
 def load_profile(config_root: Path, profile: str) -> str:
