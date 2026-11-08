@@ -1,0 +1,1 @@
+Block unauthenticated access to restricted ShareFile SZC configuration pages for CVE-2026-2699
