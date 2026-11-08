@@ -1,0 +1,1 @@
+In Mikop22/securitydemo, contain profile path resolution inside portal/configs for CVE-2026-22739
