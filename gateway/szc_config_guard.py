@@ -7,6 +7,9 @@ configuration pages on Customer Managed ShareFile Storage Zones Controller
 
 from __future__ import annotations
 
+import posixpath
+from urllib.parse import unquote
+
 RESTRICTED_PREFIXES = (
     "/config",
     "/szc/config",
@@ -20,12 +23,19 @@ class UnauthorizedConfigAccessError(PermissionError):
 
 
 def authorize_szc_request(path: str, *, authenticated_admin: bool) -> str:
-    """Validate incoming request path before forwarding to the SZC appliance.
-
-    VULNERABLE on main: normalizes nothing and forwards restricted configuration
-    paths even when ``authenticated_admin`` is False.
-    """
-    if not path or not path.startswith("/"):
-        raise ValueError("path must start with '/'")
-    # Intentionally missing authentication & path normalization check on main.
-    return path
+    """Normalize and validate incoming request path before forwarding to SZC."""
+    if not path or not path.startswith("/") or "\x00" in path:
+        raise ValueError("path must be a non-empty root-relative path")
+    decoded = unquote(path.split("?", 1)[0])
+    normalized = posixpath.normpath(decoded)
+    if not normalized.startswith("/"):
+        normalized = "/" + normalized
+    is_restricted = any(
+        normalized == prefix or normalized.startswith(prefix + "/")
+        for prefix in RESTRICTED_PREFIXES
+    )
+    if is_restricted and not authenticated_admin:
+        raise UnauthorizedConfigAccessError(
+            f"unauthenticated access to restricted SZC config path {normalized!r} blocked"
+        )
+    return normalized
